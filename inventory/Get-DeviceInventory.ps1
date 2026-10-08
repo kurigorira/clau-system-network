@@ -108,14 +108,36 @@ if ($os) {
     $installDate = ConvertFrom-WmiDate $os.InstallDate
 }
 
+# ---------------------------------------------------------------- estimated in-service date
+# The OS install date is reset by Windows 10/11 feature updates, so take the
+# oldest of: current install date, pre-upgrade install dates kept under
+# HKLM\SYSTEM\Setup\Source OS (...), and the oldest user profile folder.
+$dateCandidates = @()
+if ($installDate) { $dateCandidates += $installDate }
+$epoch = New-Object DateTime 1970, 1, 1, 0, 0, 0, ([DateTimeKind]::Utc)
+foreach ($k in (Get-ChildItem 'HKLM:\SYSTEM\Setup' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'Source OS*' })) {
+    $sec = Get-RegValue $k.PSPath 'InstallDate'
+    if ($sec) { $dateCandidates += $epoch.AddSeconds([double]$sec).ToLocalTime() }
+}
+$usersDir = Join-Path $env:SystemDrive 'Users'
+foreach ($d in (Get-ChildItem $usersDir -Force -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer })) {
+    if (@('Default', 'Default User', 'Public', 'All Users') -contains $d.Name) { continue }
+    $dateCandidates += $d.CreationTime
+}
+$estimatedStart = $null
+$valid = @($dateCandidates | Where-Object { $_ -and $_.Year -ge 2000 -and $_ -le (Get-Date) } | Sort-Object)
+if ($valid.Count -gt 0) { $estimatedStart = $valid[0] }
+
 # ---------------------------------------------------------------- hardware
 $serial = ''
 $maker  = ''
 $model  = ''
 $assetTag = ''
+$biosDate = $null
 try {
     $bios = Get-WmiObject -Class Win32_BIOS -ErrorAction Stop
     $serial = "$($bios.SerialNumber)".Trim()
+    $biosDate = ConvertFrom-WmiDate $bios.ReleaseDate
 } catch {}
 try {
     $cs = Get-WmiObject -Class Win32_ComputerSystem -ErrorAction Stop
@@ -228,6 +250,8 @@ $result | Add-Member NoteProperty OfficeLicenseKey    $licenseKeyText
 $result | Add-Member NoteProperty OfficeLicenseDetail $licenseDetail
 $result | Add-Member NoteProperty LastBootTime   (Format-Date $lastBoot)
 $result | Add-Member NoteProperty OSInstallDate  (Format-Date $installDate)
+$result | Add-Member NoteProperty EstimatedStartDate (Format-Date $estimatedStart)
+$result | Add-Member NoteProperty BiosDate       (Format-Date $biosDate)
 $result | Add-Member NoteProperty AssetTag       "$assetTag"
 $result | Add-Member NoteProperty SerialNumber   $serial
 $result | Add-Member NoteProperty Manufacturer   $maker
