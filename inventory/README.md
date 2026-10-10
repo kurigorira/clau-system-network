@@ -10,12 +10,12 @@
 
 ```
 [サーバー] \\nagasakinet.local\dfsroot\newton\startup\inventory\  （terminal\ の 2 ファイルを置く）
-    │ 方式A: 端末起動時のコピー用バッチで C:\inventory へコピー → 実行（GPO 追加不要）
+    │ 方式A: ログオン時のコピー用バッチで C:\inventory へコピー → 実行（GPO 追加不要）
     │ 方式B: GPO のスケジュールタスク（毎日＋起動5分後）
     ▼
-[各端末] C:\inventory\Get-DeviceInventory.ps1 ──► \\<結果共有>\<端末名>.csv
+[各端末] C:\inventory\Get-DeviceInventory.ps1 ──► \\<結果共有>\<端末名>_<ユーザー名>.csv
 [管理PC] admin\Merge-Inventory.ps1
-    ├─ 結果共有の *.csv を全部読む
+    ├─ 結果共有の *.csv を全部読む（同じ端末の CSV が複数あれば最新の 1 件を採用）
     ├─ 台帳.csv と突合（タグNo・導入日・設置場所は手入力分を使う / 新しい端末は行を追加）
     └─► 端末一覧.xlsx（端末一覧 / 未収集 / 集計 の3シート）
 ```
@@ -72,13 +72,15 @@ inventory\
 │  ├ Get-DeviceInventory.ps1     端末 1 台分の情報を収集
 │  ├ run-inventory.bat           ps1 を実行して結果共有へ CSV を書き込む（先頭の SHARE= を設定）
 │  ├ check-inventory.bat         動かないときの診断用（ダブルクリックで各段階を確認。サーバーには置かない）
-│  └ startup-snippet.bat         既存のスタートアップ用バッチに追加する 2 行の見本（サーバーには置かない）
+│  ├ prepare-inventory-folder.bat Windows 7 で C:\inventory を事前に作る（管理者で 1 台ずつ。サーバーには置かない）
+│  └ startup-snippet.bat         既存のログオン用バッチに追加する 2 行の見本（サーバーには置かない）
 ├ admin\                        … 管理 PC で使う
-│  ├ Merge-Inventory.ps1         全端末分を集計し、台帳.csv を更新、.xlsx を出力
+│  ├ Merge-Inventory.ps1         結果の CSV をまとめて .xlsx を出力し、台帳.csv を更新
+│  ├ Prepare-InventoryFolder.ps1 Windows 7 端末の C:\inventory を管理共有経由でまとめて準備
 │  ├ lib\Write-Xlsx.ps1          .xlsx の書き出し（Merge から読み込まれる）
 │  ├ Find-NetworkHosts.ps1       Ping スキャンでネットワーク上の機器を洗い出す（任意）
 │  └ Invoke-RemoteInventory.ps1  WinRM で今すぐ一括収集したいとき用（補助）
-├ Deploy-Startup.md              方式A: 起動時コピーでの導入手順（推奨）
+├ Deploy-Startup.md              方式A: ログオン時コピーでの導入手順（推奨）
 └ Install-InventoryTask.md       方式B: GPO スケジュールタスクでの導入手順
 ```
 
@@ -90,12 +92,15 @@ inventory\
 
 | 方式 | 内容 | 手順書 |
 |---|---|---|
-| **A: 起動時コピー（GPO 追加不要・推奨）** | 既存のスタートアップ用バッチに 2 行を追加する。端末を起動するたびに `startup\inventory` を `C:\inventory` へコピーして実行する | [Deploy-Startup.md](Deploy-Startup.md) |
+| **A: ログオン時コピー（GPO 追加不要・推奨）** | 既存のログオン用バッチに 2 行を追加する。ユーザーがログオンするたびに `startup\inventory` を `C:\inventory` へコピーして実行する（Windows 7 は事前準備が必要） | [Deploy-Startup.md](Deploy-Startup.md) |
 | B: GPO のスケジュールタスク | GPO で全端末にタスクを登録し、毎日と起動 5 分後に自動で収集する | [Install-InventoryTask.md](Install-InventoryTask.md) |
 
 **どちらの方式でも、全台展開の前に Windows 7 と Windows 10/11 の端末で 1 台ずつ試験してください。**
 
-### 2. 一覧を作る（いつでも何度でも）
+### 2. 一覧を作る（結果の CSV をまとめる。いつでも何度でも）
+
+結果共有には、端末とユーザーの組み合わせごとに `<端末名>_<ユーザー名>.csv` がたまっていきます。
+これを `Merge-Inventory.ps1` が 1 つの Excel にまとめます。同じ端末の CSV が複数あれば最後に収集された 1 件だけを使うので、一覧は 1 台 1 行になります。
 
 管理 PC に `admin` フォルダごとコピーして実行します（`-RawDir` は `run-inventory.bat` の `SHARE=` に設定した結果共有）。
 
@@ -139,6 +144,6 @@ MAC アドレスは ARP で取るため、スキャンする PC と同じセグ�
 ## 注意事項
 
 - スクリプトは**読み取りのみ**で、端末の設定は変更しません。ただし端末へのスクリプト配布や GPO の追加は、電子カルテベンダーとの保守契約に従って事前に連絡・承認を取ってください。
-- 情報が取れるのは、電源が入っている端末だけです。方式 A は**端末の起動時**に収集するため、再起動しない端末は収集されません（「収集済(30日以上前)」で分かります。その端末で `C:\inventory\run-inventory.bat` を管理者権限で実行すれば収集されます）。
+- 情報が取れるのは、電源が入っている端末だけです。方式 A は**ユーザーのログオン時**に収集するため、誰もログオンしない端末は収集されません（「収集済(30日以上前)」や「未収集」で分かります。その端末で `C:\inventory\run-inventory.bat` を実行すれば収集されます）。
 - 「起動日」は Windows 8 以降の高速スタートアップが有効だと、シャットダウン→電源 ON では更新されません（再起動で更新されます）。
 - 出力（xlsx・台帳・raw）にはライセンス情報が含まれます。保存場所のアクセス権に注意してください。

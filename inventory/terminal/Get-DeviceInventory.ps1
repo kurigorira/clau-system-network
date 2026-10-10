@@ -18,14 +18,38 @@
   CSV per host (<COMPUTERNAME>.csv) is written. When omitted, the result
   object is written to the pipeline (used by Invoke-RemoteInventory.ps1).
 
+.PARAMETER FileName
+  Output file name without ".csv". Default: COMPUTERNAME. run-inventory.bat
+  passes COMPUTERNAME_USERNAME so that every user who logs on writes (and can
+  overwrite) only their own file.
+
+.PARAMETER SkipIfNewerThanHours
+  When the output file already exists and was written within this many hours,
+  exit immediately with code 0 (avoids collecting at every logon). 0 = always.
+
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File Get-DeviceInventory.ps1 -OutputDir \\fs01\inventory$\raw
 #>
 param(
-    [string]$OutputDir
+    [string]$OutputDir,
+    [string]$FileName = $env:COMPUTERNAME,
+    [int]$SkipIfNewerThanHours = 0
 )
 
 $ErrorActionPreference = 'Continue'
+
+if ($OutputDir -and $SkipIfNewerThanHours -gt 0) {
+    $existing = Join-Path $OutputDir "$FileName.csv"
+    try {
+        if (Test-Path -LiteralPath $existing) {
+            $age = (Get-Date) - (Get-Item -LiteralPath $existing).LastWriteTime
+            if ($age.TotalHours -lt $SkipIfNewerThanHours) {
+                Write-Host ("SKIP: {0} was written {1:N1} hours ago (limit {2} h)" -f $existing, $age.TotalHours, $SkipIfNewerThanHours)
+                exit 0
+            }
+        }
+    } catch {}
+}
 
 function Get-RegValue {
     param([string]$Path, [string]$Name)
@@ -257,12 +281,13 @@ $result | Add-Member NoteProperty SerialNumber   $serial
 $result | Add-Member NoteProperty Manufacturer   $maker
 $result | Add-Member NoteProperty Model          $model
 $result | Add-Member NoteProperty CollectedAt    (Format-Date (Get-Date))
+$result | Add-Member NoteProperty CollectedBy    "$env:USERDOMAIN\$env:USERNAME"
 
 if ($OutputDir) {
     # Write to a temp file first, then rename, so the merge script never reads a half-written file.
     # Delete + rename instead of "Move-Item -Force" so overwriting also works on PowerShell 2.0.
     # Exit code: 0 = written, 1 = could not write (see the log written by run-inventory.bat).
-    $final = Join-Path $OutputDir "$($env:COMPUTERNAME).csv"
+    $final = Join-Path $OutputDir "$FileName.csv"
     $tmp   = "$final.tmp"
     try {
         $result | Export-Csv -Path $tmp -NoTypeInformation -Encoding UTF8 -ErrorAction Stop

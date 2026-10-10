@@ -3,8 +3,8 @@ rem ------------------------------------------------------------------
 rem  Diagnostic tool: double-click on a terminal to check every step.
 rem  Shows [OK] / [NG] for each step and stops at the first problem.
 rem  Edit SRC below if the distribution folder path is different.
-rem  NOTE: this test runs as YOU. The boot-time batch runs as SYSTEM
-rem        (computer account), so share permissions may differ.
+rem  Run it as an ordinary user (the logon batch also runs as the
+rem  logged-on user) to test the real permissions.
 rem ------------------------------------------------------------------
 setlocal
 set SRC=\\nagasakinet.local\dfsroot\newton\startup\inventory
@@ -46,6 +46,10 @@ echo   [OK] copied
 goto :step4
 :copyng
 echo   [NG] Copy failed. See the robocopy messages above.
+echo        "Access is denied" on C:\inventory: ordinary users cannot create
+echo        or write C:\inventory on this PC - typical on Windows 7.
+echo        Run prepare-inventory-folder.bat once as administrator on this PC,
+echo        or admin\Prepare-InventoryFolder.ps1 from the admin PC.
 goto :done
 
 :step4
@@ -68,7 +72,7 @@ goto :done
 echo   [OK] reachable
 echo.
 echo [5] Run the collector - takes 10 to 60 seconds, please wait ...
-call "%DST%\run-inventory.bat"
+call "%DST%\run-inventory.bat" "%CSHARE%" 0
 set RC=%ERRORLEVEL%
 echo   exit code = %RC%   - 0 = OK, 1 = could not write CSV, 2 = SHARE problem
 echo   ---- %DST%\last-run.log ----
@@ -78,13 +82,13 @@ if not "%RC%"=="0" goto :runng
 
 echo.
 echo [6] Result file
-if exist "%CSHARE%\%COMPUTERNAME%.csv" goto :allok
+if exist "%CSHARE%\%COMPUTERNAME%_%USERNAME%.csv" goto :allok
 :runng
 echo   [NG] The CSV was not written. See last-run.log above.
 echo        "Access is denied" means no write permission on the result folder.
 goto :done
 :allok
-echo   [OK] %CSHARE%\%COMPUTERNAME%.csv
+echo   [OK] %CSHARE%\%COMPUTERNAME%_%USERNAME%.csv
 echo.
 echo   All steps OK.
 

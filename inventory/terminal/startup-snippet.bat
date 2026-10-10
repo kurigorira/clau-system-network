@@ -1,6 +1,11 @@
 rem ==================================================================
-rem  Add these 2 lines to the END of the EXISTING startup copy batch.
+rem  Add these 2 lines to the END of the EXISTING logon copy batch.
 rem  Do NOT put this file in the distribution folder itself.
+rem
+rem  WINDOWS 7: ordinary users cannot create C:\inventory there.
+rem  Prepare it ONCE as administrator before rollout:
+rem    admin\Prepare-InventoryFolder.ps1 (from the admin PC, many PCs) or
+rem    terminal\prepare-inventory-folder.bat (on each PC, run as admin)
 rem
 rem  CHECK THE PATH: Explorer shows the share name, e.g.
 rem    "newton (\\NAGASAKINET.local\dfsroot)" = \\nagasakinet.local\dfsroot\newton
