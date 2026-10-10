@@ -37,7 +37,7 @@ $targets = $targets | Select-Object -Unique
 if (-not $targets) { throw 'No target computers. Use -ComputerName, -ComputerListFile or -FromActiveDirectory.' }
 
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
-$collector = Join-Path $PSScriptRoot 'Get-DeviceInventory.ps1'
+$collector = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'terminal') 'Get-DeviceInventory.ps1'
 
 $invokeArgs = @{
     ComputerName  = $targets

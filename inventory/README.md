@@ -9,11 +9,13 @@
 ## 全体の流れ
 
 ```
-[各端末] 方式A: 既存のコピーツールで配布・実行（GPO 不要）
-         方式B: GPO のスケジュールタスク（毎日＋起動5分後, SYSTEM）
-    └─ Get-DeviceInventory.ps1 ──► \\fs01\inventory$\raw\<端末名>.csv
-[管理PC] Merge-Inventory.ps1
-    ├─ raw\*.csv を全部読む
+[サーバー] \\nagasakinet.local\dfsroot\newtons\startup\inventory\  （terminal\ の 2 ファイルを置く）
+    │ 方式A: 端末起動時のコピー用バッチで C:\inventory へコピー → 実行（GPO 追加不要）
+    │ 方式B: GPO のスケジュールタスク（毎日＋起動5分後）
+    ▼
+[各端末] C:\inventory\Get-DeviceInventory.ps1 ──► \\<結果共有>\<端末名>.csv
+[管理PC] admin\Merge-Inventory.ps1
+    ├─ 結果共有の *.csv を全部読む
     ├─ 台帳.csv と突合（タグNo・導入日・設置場所は手入力分を使う / 新しい端末は行を追加）
     └─► 端末一覧.xlsx（端末一覧 / 未収集 / 集計 の3シート）
 ```
@@ -64,40 +66,46 @@
 
 ## ファイル構成
 
-| ファイル | 役割 | 実行場所 |
-|---|---|---|
-| `Get-DeviceInventory.ps1` | 端末 1 台分の情報を収集 | 各端末 |
-| `run-inventory.bat` | 同じフォルダの ps1 を実行し、共有へ CSV を書き込む（結果ログ `last-run.log`） | 各端末 |
-| [`Deploy-WithCopyTool.md`](Deploy-WithCopyTool.md) | **方式A: 既存コピーツールでの配布手順（GPO 不要）** | — |
-| [`Install-InventoryTask.md`](Install-InventoryTask.md) | 方式B: 共有フォルダ・GPO の設定手順 | — |
-| `Merge-Inventory.ps1` | 全端末分を集計し、台帳.csv を更新、.xlsx を出力 | 管理 PC |
-| `lib/Write-Xlsx.ps1` | .xlsx の書き出し（Merge から読み込まれる） | — |
-| `Find-NetworkHosts.ps1` | Ping スキャンで、ネットワーク上の機器を洗い出す（任意） | 管理 PC |
-| `Invoke-RemoteInventory.ps1` | WinRM で今すぐ一括収集したいとき用（補助） | 管理 PC |
+```
+inventory\
+├ terminal\                     … サーバーの startup\inventory\ に置く（端末へコピーされる）
+│  ├ Get-DeviceInventory.ps1     端末 1 台分の情報を収集
+│  ├ run-inventory.bat           ps1 を実行して結果共有へ CSV を書き込む（先頭の SHARE= を設定）
+│  └ startup-snippet.bat         既存のスタートアップ用バッチに追加する 2 行の見本（サーバーには置かない）
+├ admin\                        … 管理 PC で使う
+│  ├ Merge-Inventory.ps1         全端末分を集計し、台帳.csv を更新、.xlsx を出力
+│  ├ lib\Write-Xlsx.ps1          .xlsx の書き出し（Merge から読み込まれる）
+│  ├ Find-NetworkHosts.ps1       Ping スキャンでネットワーク上の機器を洗い出す（任意）
+│  └ Invoke-RemoteInventory.ps1  WinRM で今すぐ一括収集したいとき用（補助）
+├ Deploy-Startup.md              方式A: 起動時コピーでの導入手順（推奨）
+└ Install-InventoryTask.md       方式B: GPO スケジュールタスクでの導入手順
+```
 
 ## 手順
 
 ### 1. 収集する
 
-次のどちらかの方式で、各端末から共有フォルダ `raw` に CSV を集めます。
+次のどちらかの方式で、各端末から結果共有フォルダに CSV を集めます。
 
 | 方式 | 内容 | 手順書 |
 |---|---|---|
-| **A: 既存のコピーツール（GPO 不要・推奨）** | 院内のコピーツールで `Get-DeviceInventory.ps1` と `run-inventory.bat` を各端末に配り、bat を実行する。月 1 回など、好きなタイミングで実行できる | [Deploy-WithCopyTool.md](Deploy-WithCopyTool.md) |
+| **A: 起動時コピー（GPO 追加不要・推奨）** | 既存のスタートアップ用バッチに 2 行を追加する。端末を起動するたびに `startup\inventory` を `C:\inventory` へコピーして実行する | [Deploy-Startup.md](Deploy-Startup.md) |
 | B: GPO のスケジュールタスク | GPO で全端末にタスクを登録し、毎日と起動 5 分後に自動で収集する | [Install-InventoryTask.md](Install-InventoryTask.md) |
 
 **どちらの方式でも、全台展開の前に Windows 7 と Windows 10/11 の端末で 1 台ずつ試験してください。**
 
 ### 2. 一覧を作る（いつでも何度でも）
 
-管理 PC で、このフォルダ（`inventory`）ごとコピーして実行します。
+管理 PC に `admin` フォルダごとコピーして実行します（`-RawDir` は `run-inventory.bat` の `SHARE=` に設定した結果共有）。
 
 ```powershell
-cd C:\tools\inventory
-.\Merge-Inventory.ps1 -RawDir \\fs01\inventory$\raw `
-                      -LedgerFile \\fs01\inventory$\台帳.csv `
+cd C:\tools\admin
+.\Merge-Inventory.ps1 -RawDir \\nagasakinet.local\dfsroot\newtons\inventory_result `
+                      -LedgerFile C:\tools\台帳.csv `
                       -OutFile C:\tools\端末一覧.xlsx
 ```
+
+台帳.csv は、担当者だけが読み書きできる場所に置いてください（結果共有と同じフォルダには置かないでください）。
 
 スクリプトの実行が禁止されている場合は、`powershell -ExecutionPolicy Bypass -File .\Merge-Inventory.ps1 …` で実行してください。
 
@@ -130,6 +138,6 @@ MAC アドレスは ARP で取るため、スキャンする PC と同じセグ�
 ## 注意事項
 
 - スクリプトは**読み取りのみ**で、端末の設定は変更しません。ただし端末へのスクリプト配布や GPO の追加は、電子カルテベンダーとの保守契約に従って事前に連絡・承認を取ってください。
-- 情報が取れるのは、電源が入っている端末だけです。方式 A では実行時に電源が切れていた端末は次回の実行で、方式 B では次に起動したとき（起動 5 分後）に収集されます。
+- 情報が取れるのは、電源が入っている端末だけです。方式 A は**端末の起動時**に収集するため、再起動しない端末は収集されません（「収集済(30日以上前)」で分かります。その端末で `C:\inventory\run-inventory.bat` を管理者権限で実行すれば収集されます）。
 - 「起動日」は Windows 8 以降の高速スタートアップが有効だと、シャットダウン→電源 ON では更新されません（再起動で更新されます）。
 - 出力（xlsx・台帳・raw）にはライセンス情報が含まれます。保存場所のアクセス権に注意してください。

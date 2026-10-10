@@ -1,5 +1,7 @@
 # GPO でのスケジュールタスク配布手順
 
+> 方式B（GPO）の手順です。GPO を追加しない場合は [Deploy-Startup.md](Deploy-Startup.md)（方式A）を使ってください。
+
 全端末で **毎日 1 回 ＋ 起動 5 分後** に `Get-DeviceInventory.ps1` を SYSTEM 権限で実行し、
 共有フォルダに `<端末名>.csv` を書き出させる設定です。
 病棟などで再起動せずに動き続ける端末も、毎日実行するので収集できます。
@@ -10,7 +12,7 @@
 
 ```
 D:\inventory\
-  Get-DeviceInventory.ps1     … 端末で実行するスクリプト
+  Get-DeviceInventory.ps1     … 端末で実行するスクリプト（リポジトリの terminal\ にあるもの）
   raw\                        … 各端末の CSV が入る
   台帳.csv                    … Merge-Inventory.ps1 が作成・更新
 ```
