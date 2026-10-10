@@ -9,7 +9,7 @@
 ## 全体の流れ
 
 ```
-[サーバー] \\nagasakinet.local\dfsroot\newtons\startup\inventory\  （terminal\ の 2 ファイルを置く）
+[サーバー] \\nagasakinet.local\dfsroot\newton\startup\inventory\  （terminal\ の 2 ファイルを置く）
     │ 方式A: 端末起動時のコピー用バッチで C:\inventory へコピー → 実行（GPO 追加不要）
     │ 方式B: GPO のスケジュールタスク（毎日＋起動5分後）
     ▼
@@ -68,9 +68,10 @@
 
 ```
 inventory\
-├ terminal\                     … サーバーの startup\inventory\ に置く（端末へコピーされる）
+├ terminal\                     … 中の ps1 と run-inventory.bat の 2 つだけを startup\inventory\ の直下に置く
 │  ├ Get-DeviceInventory.ps1     端末 1 台分の情報を収集
 │  ├ run-inventory.bat           ps1 を実行して結果共有へ CSV を書き込む（先頭の SHARE= を設定）
+│  ├ check-inventory.bat         動かないときの診断用（ダブルクリックで各段階を確認。サーバーには置かない）
 │  └ startup-snippet.bat         既存のスタートアップ用バッチに追加する 2 行の見本（サーバーには置かない）
 ├ admin\                        … 管理 PC で使う
 │  ├ Merge-Inventory.ps1         全端末分を集計し、台帳.csv を更新、.xlsx を出力
@@ -100,7 +101,7 @@ inventory\
 
 ```powershell
 cd C:\tools\admin
-.\Merge-Inventory.ps1 -RawDir \\nagasakinet.local\dfsroot\newtons\inventory_result `
+.\Merge-Inventory.ps1 -RawDir \\nagasakinet.local\dfsroot\newton\inventory_result `
                       -LedgerFile C:\tools\台帳.csv `
                       -OutFile C:\tools\端末一覧.xlsx
 ```
