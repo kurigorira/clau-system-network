@@ -9,7 +9,8 @@
 ## 全体の流れ
 
 ```
-[各端末] GPOのスケジュールタスク(毎日＋起動5分後, SYSTEM)
+[各端末] 方式A: 既存のコピーツールで配布・実行（GPO 不要）
+         方式B: GPO のスケジュールタスク（毎日＋起動5分後, SYSTEM）
     └─ Get-DeviceInventory.ps1 ──► \\fs01\inventory$\raw\<端末名>.csv
 [管理PC] Merge-Inventory.ps1
     ├─ raw\*.csv を全部読む
@@ -65,19 +66,27 @@
 
 | ファイル | 役割 | 実行場所 |
 |---|---|---|
-| `Get-DeviceInventory.ps1` | 端末 1 台分の情報を収集 | 各端末（GPO） |
-| [`Install-InventoryTask.md`](Install-InventoryTask.md) | **共有フォルダ・GPO の設定手順** | — |
+| `Get-DeviceInventory.ps1` | 端末 1 台分の情報を収集 | 各端末 |
+| `run-inventory.bat` | 同じフォルダの ps1 を実行し、共有へ CSV を書き込む（結果ログ `last-run.log`） | 各端末 |
+| [`Deploy-WithCopyTool.md`](Deploy-WithCopyTool.md) | **方式A: 既存コピーツールでの配布手順（GPO 不要）** | — |
+| [`Install-InventoryTask.md`](Install-InventoryTask.md) | 方式B: 共有フォルダ・GPO の設定手順 | — |
 | `Merge-Inventory.ps1` | 全端末分を集計し、台帳.csv を更新、.xlsx を出力 | 管理 PC |
 | `lib/Write-Xlsx.ps1` | .xlsx の書き出し（Merge から読み込まれる） | — |
 | `Find-NetworkHosts.ps1` | Ping スキャンで、ネットワーク上の機器を洗い出す（任意） | 管理 PC |
 | `Invoke-RemoteInventory.ps1` | WinRM で今すぐ一括収集したいとき用（補助） | 管理 PC |
-| `run-inventory.bat` | スタートアップスクリプトで使う場合用（補助） | 各端末 |
 
 ## 手順
 
-### 1. 収集の設定（初回のみ）
-[Install-InventoryTask.md](Install-InventoryTask.md) に従って、共有フォルダを作り、GPO でスケジュールタスクを配布します。
-**全台展開の前に、Windows 7 と Windows 10/11 の端末で 1 台ずつ試験してください。**
+### 1. 収集する
+
+次のどちらかの方式で、各端末から共有フォルダ `raw` に CSV を集めます。
+
+| 方式 | 内容 | 手順書 |
+|---|---|---|
+| **A: 既存のコピーツール（GPO 不要・推奨）** | 院内のコピーツールで `Get-DeviceInventory.ps1` と `run-inventory.bat` を各端末に配り、bat を実行する。月 1 回など、好きなタイミングで実行できる | [Deploy-WithCopyTool.md](Deploy-WithCopyTool.md) |
+| B: GPO のスケジュールタスク | GPO で全端末にタスクを登録し、毎日と起動 5 分後に自動で収集する | [Install-InventoryTask.md](Install-InventoryTask.md) |
+
+**どちらの方式でも、全台展開の前に Windows 7 と Windows 10/11 の端末で 1 台ずつ試験してください。**
 
 ### 2. 一覧を作る（いつでも何度でも）
 
@@ -120,7 +129,7 @@ MAC アドレスは ARP で取るため、スキャンする PC と同じセグ�
 
 ## 注意事項
 
-- スクリプトは**読み取りのみ**で、端末の設定は変更しません。ただし GPO の追加は、電子カルテベンダーとの保守契約に従って事前に連絡・承認を取ってください。
-- 情報が取れるのは、電源が入っている端末だけです。止まっている端末は、次に起動したとき（起動 5 分後）に収集されます。
+- スクリプトは**読み取りのみ**で、端末の設定は変更しません。ただし端末へのスクリプト配布や GPO の追加は、電子カルテベンダーとの保守契約に従って事前に連絡・承認を取ってください。
+- 情報が取れるのは、電源が入っている端末だけです。方式 A では実行時に電源が切れていた端末は次回の実行で、方式 B では次に起動したとき（起動 5 分後）に収集されます。
 - 「起動日」は Windows 8 以降の高速スタートアップが有効だと、シャットダウン→電源 ON では更新されません（再起動で更新されます）。
 - 出力（xlsx・台帳・raw）にはライセンス情報が含まれます。保存場所のアクセス権に注意してください。

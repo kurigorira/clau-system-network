@@ -260,10 +260,21 @@ $result | Add-Member NoteProperty CollectedAt    (Format-Date (Get-Date))
 
 if ($OutputDir) {
     # Write to a temp file first, then rename, so the merge script never reads a half-written file.
+    # Delete + rename instead of "Move-Item -Force" so overwriting also works on PowerShell 2.0.
+    # Exit code: 0 = written, 1 = could not write (see the log written by run-inventory.bat).
     $final = Join-Path $OutputDir "$($env:COMPUTERNAME).csv"
     $tmp   = "$final.tmp"
-    $result | Export-Csv -Path $tmp -NoTypeInformation -Encoding UTF8
-    Move-Item -Path $tmp -Destination $final -Force
+    try {
+        $result | Export-Csv -Path $tmp -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
+        if (Test-Path -LiteralPath $final) { Remove-Item -LiteralPath $final -Force -ErrorAction Stop }
+        Rename-Item -LiteralPath $tmp -NewName (Split-Path $final -Leaf) -ErrorAction Stop
+        Write-Host "OK: $final"
+        exit 0
+    } catch {
+        Write-Host "ERROR: could not write $final : $($_.Exception.Message)"
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+        exit 1
+    }
 } else {
     $result
 }
